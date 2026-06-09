@@ -6,12 +6,23 @@ import { SectionHeader, Card, fmt$ } from './UI'
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct']
 
 const CO_META = {
-  SOI:     { color: '#E8A030', flag: '🇺🇸' },
-  CAS:     { color: '#2ABFAA', flag: '🇺🇸' },
-  NanoTech:{ color: '#3DC98A', flag: '🇮🇱' },
-  RedSun:  { color: '#E05252', flag: '🇦🇪' },
+  SOI: {
+    color: '#E8A030',
+    flag: '🇺🇸'
+  },
+  CAS: {
+    color: '#2ABFAA',
+    flag: '🇳🇿'
+  },
+  NanoTech: {
+    color: '#3DC98A',
+    flag: '🇬🇧'
+  },
+  RedSun: {
+    color: '#E05252',
+    flag: '🇸🇬'
+  },
 }
-
 export default function Companies() {
   const [selected, setSelected] = useState('SOI')
   const co = companies[selected]
