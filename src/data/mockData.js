@@ -141,14 +141,69 @@ export const projects = [
 ]
 
 export const people = [
-  { name: 'James Harrington', title: 'Chief Executive Officer',   dept: 'Executive',   email: 'j.harrington@soiaviation.com', active: true  },
-  { name: 'Maria Delacroix',  title: 'Chief Financial Officer',    dept: 'Finance',     email: 'm.delacroix@soiaviation.com',  active: true  },
-  { name: 'Tariq Rahman',     title: 'VP Operations',              dept: 'Operations',  email: 't.rahman@soiaviation.com',     active: true  },
-  { name: 'Sophie Adler',     title: 'Senior Contracts Manager',   dept: 'Contracts',   email: 's.adler@soiaviation.com',      active: true  },
-  { name: 'Carlos Vega',      title: 'Logistics Coordinator',      dept: 'Operations',  email: 'c.vega@soiaviation.com',       active: true  },
-  { name: 'Yuki Tanaka',      title: 'APAC Sales Director',        dept: 'Sales',       email: 'y.tanaka@soiaviation.com',     active: true  },
-  { name: 'Rania El-Sayed',   title: 'MENA Regional Manager',      dept: 'Sales',       email: 'r.elsayed@soiaviation.com',    active: true  },
-  { name: 'Ben Kowalski',     title: 'Compliance Officer',         dept: 'Compliance',  email: 'b.kowalski@soiaviation.com',   active: false },
+  {
+    name: 'Alexis Snyder',
+    title: 'Global Chief of Staff',
+    dept: 'Executive',
+    email: 'alexis@soiaviation.com',
+    active: true
+  },
+  {
+    name: 'Ramin Akhavi',
+    title: 'Global Operations Manager',
+    dept: 'Operations',
+    email: 'ramin@soiaviation.com',
+    active: true
+  },
+  {
+    name: 'Shreya Maddhali',
+    title: 'Global IT Systems Manager',
+    dept: 'IT',
+    email: 'shreya@soiaviation.com',
+    active: true
+  },
+  {
+    name: 'Melissa Hokama',
+    title: 'SOI Executive Assistant',
+    dept: 'Executive',
+    email: 'melissa@soiaviation.com',
+    active: true
+  },
+  {
+    name: 'Floreska Angeles',
+    title: 'SOI Procurement Manager',
+    dept: 'Operations',
+    email: 'floreska@soiaviation.com',
+    active: true
+  },
+  {
+    name: 'Dina Alipio',
+    title: 'SOI Purchasing Manager',
+    dept: 'Operations',
+    email: 'dina@soiaviation.com',
+    active: true
+  },
+  {
+    name: 'Cameron Branch',
+    title: 'SOI Procurement Specialist',
+    dept: 'Operations',
+    email: 'cameron@soiaviation.com',
+    active: true
+  },
+  {
+    name: 'Mark Morente',
+    title: 'SOI Accounting Lead',
+    dept: 'Finance',
+    email: 'mark@soiaviation.com',
+    active: true
+  },
+  {
+    name: 'Cody Calderon',
+    title: 'SOI Warehouse Lead',
+    dept: 'Operations',
+    email: 'cody@soiaviation.com',
+    active: true
+  }
 ]
 
 export const calendarEvents = [
