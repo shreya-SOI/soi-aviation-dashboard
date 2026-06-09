@@ -212,6 +212,38 @@ export const people = [
     company: 'SOI',
     email: 'cody@soiaviation.com',
     active: true
+  }, 
+    {
+    name: 'Keaw Kosalanan',
+    title: 'N/A',
+    dept: 'N/A',
+    company: 'CAS',
+    email: 'keaw@customaero.co.nz',
+    active: true
+  },
+    {
+    name: 'Ting Pan',
+    title: 'N/A',
+    dept: 'N/A',
+    company: 'CAS',
+    email: 'ting@customaero.co.nz',
+    active: true
+  },
+    {
+    name: 'Amy Nguyen',
+    title: 'N/A',
+    dept: 'N/A',
+    company: 'CAS',
+    email: 'amy@customaero.co.nz',
+    active: true
+  },
+    {
+    name: 'Yukine Okada',
+    title: 'N/A',
+    dept: 'N/A',
+    company: 'CAS',
+    email: 'yukine@customaero.co.nz',
+    active: true
   }
 ]
 
