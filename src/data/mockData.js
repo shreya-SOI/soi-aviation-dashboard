@@ -145,6 +145,7 @@ export const people = [
     name: 'Alexis Snyder',
     title: 'Global Chief of Staff',
     dept: 'Executive',
+    company: 'SOI',
     email: 'alexis@soiaviation.com',
     active: true
   },
@@ -152,6 +153,7 @@ export const people = [
     name: 'Ramin Akhavi',
     title: 'Global Operations Manager',
     dept: 'Operations',
+    company: 'SOI',
     email: 'ramin@soiaviation.com',
     active: true
   },
@@ -159,6 +161,7 @@ export const people = [
     name: 'Shreya Maddhali',
     title: 'Global IT Systems Manager',
     dept: 'IT',
+    company: 'SOI',
     email: 'shreya@soiaviation.com',
     active: true
   },
@@ -166,6 +169,7 @@ export const people = [
     name: 'Melissa Hokama',
     title: 'SOI Executive Assistant',
     dept: 'Executive',
+    company: 'SOI',
     email: 'melissa@soiaviation.com',
     active: true
   },
@@ -173,6 +177,7 @@ export const people = [
     name: 'Floreska Angeles',
     title: 'SOI Procurement Manager',
     dept: 'Operations',
+    company: 'SOI',
     email: 'floreska@soiaviation.com',
     active: true
   },
@@ -180,6 +185,7 @@ export const people = [
     name: 'Dina Alipio',
     title: 'SOI Purchasing Manager',
     dept: 'Operations',
+    company: 'SOI',
     email: 'dina@soiaviation.com',
     active: true
   },
@@ -187,6 +193,7 @@ export const people = [
     name: 'Cameron Branch',
     title: 'SOI Procurement Specialist',
     dept: 'Operations',
+    company: 'SOI',
     email: 'cameron@soiaviation.com',
     active: true
   },
@@ -194,6 +201,7 @@ export const people = [
     name: 'Mark Morente',
     title: 'SOI Accounting Lead',
     dept: 'Finance',
+    company: 'SOI',
     email: 'mark@soiaviation.com',
     active: true
   },
@@ -201,6 +209,7 @@ export const people = [
     name: 'Cody Calderon',
     title: 'SOI Warehouse Lead',
     dept: 'Operations',
+    company: 'SOI',
     email: 'cody@soiaviation.com',
     active: true
   }
