@@ -86,34 +86,94 @@ export function Projects() {
 
 // ── People ────────────────────────────────────────────────────────────────────
 export function People() {
-  const deptColor = {
-    Executive: '#E8A030', Finance: '#2ABFAA', Operations: '#3DC98A',
-    Sales: '#8FA3BC', Contracts: '#2ABFAA', Compliance: '#E05252'
+  const [selectedCompany, setSelectedCompany] = useState('SOI')
+
+  const CO_META = {
+    SOI:      { color: '#E8A030', flag: '🇺🇸', label: 'SOI Aviation' },
+    CAS:      { color: '#2ABFAA', flag: '🇳🇿', label: 'CAS' },
+    NanoTech: { color: '#3DC98A', flag: '🇬🇧', label: 'NanoTech' },
+    RedSun:   { color: '#E05252', flag: '🇸🇬', label: 'RedSun' },
   }
+
+  const deptColor = {
+    Executive: '#E8A030',
+    Finance: '#2ABFAA',
+    Operations: '#3DC98A',
+    Sales: '#8FA3BC',
+    Contracts: '#2ABFAA',
+    Compliance: '#E05252',
+    IT: '#6366F1',
+  }
+
+  const companyPeople = people.filter(p => p.company === selectedCompany)
+  const meta = CO_META[selectedCompany]
 
   return (
     <div className="page">
-      <SectionHeader title="People" count={people.length} />
-      <p className="page-sub">SOI Aviation team directory</p>
-      <div className="people-grid">
-        {people.map(p => {
-          const initials = p.name.split(' ').map(n => n[0]).join('')
-          return (
-            <Card key={p.email} className={`person-card ${!p.active ? 'inactive' : ''}`}>
-              <div className="person-avatar" style={{ background: deptColor[p.dept] + '33', color: deptColor[p.dept] }}>
-                {initials}
-              </div>
-              <div className="person-info">
-                <p className="person-name">{p.name}</p>
-                <p className="person-title">{p.title}</p>
-                <span className="person-dept" style={{ color: deptColor[p.dept] }}>{p.dept}</span>
-                {!p.active && <span className="inactive-badge">Inactive</span>}
-              </div>
-              <p className="person-email mono">{p.email}</p>
-            </Card>
-          )
-        })}
+      <SectionHeader title="People" count={companyPeople.length} />
+      <p className="page-sub">Team directory by company</p>
+
+      <div className="company-tabs">
+        {Object.entries(CO_META).map(([key, value]) => (
+          <button
+            key={key}
+            className={`company-tab ${selectedCompany === key ? 'active' : ''}`}
+            onClick={() => setSelectedCompany(key)}
+            style={{
+              borderColor: selectedCompany === key ? value.color : undefined,
+              color: selectedCompany === key ? value.color : undefined,
+            }}
+          >
+            <span>{value.flag}</span>
+            <span>{key}</span>
+          </button>
+        ))}
       </div>
+
+      <Card className="company-main">
+        <div className="company-header">
+          <div>
+            <h2 className="company-name">{meta.label}</h2>
+            <p className="company-role" style={{ color: meta.color }}>
+              {companyPeople.length} team members
+            </p>
+          </div>
+          <div className="company-flag">{meta.flag}</div>
+        </div>
+
+        <div className="people-grid">
+          {companyPeople.map(p => {
+            const initials = p.name.split(' ').map(n => n[0]).join('')
+            return (
+              <Card key={p.email} className={`person-card ${!p.active ? 'inactive' : ''}`}>
+                <div
+                  className="person-avatar"
+                  style={{
+                    background: (deptColor[p.dept] || meta.color) + '33',
+                    color: deptColor[p.dept] || meta.color,
+                  }}
+                >
+                  {initials}
+                </div>
+
+                <div className="person-info">
+                  <p className="person-name">{p.name}</p>
+                  <p className="person-title">{p.title}</p>
+                  <span
+                    className="person-dept"
+                    style={{ color: deptColor[p.dept] || meta.color }}
+                  >
+                    {p.dept}
+                  </span>
+                  {!p.active && <span className="inactive-badge">Inactive</span>}
+                </div>
+
+                <p className="person-email mono">{p.email}</p>
+              </Card>
+            )
+          })}
+        </div>
+      </Card>
     </div>
   )
 }
