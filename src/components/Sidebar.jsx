@@ -48,9 +48,9 @@ export default function Sidebar({ active, onNav }) {
       <div className="sidebar-footer">
         <div className="footer-date mono">{dateStr}</div>
         <div className="footer-user">
-          <div className="user-avatar">JH</div>
+          <div className="user-avatar">GG</div>
           <div>
-            <div className="user-name">James Harrington</div>
+            <div className="user-name">Greg Gaba</div>
             <div className="user-role">CEO</div>
           </div>
         </div>
