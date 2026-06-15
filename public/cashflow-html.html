@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SOI Aviation — Cashflow Dashboard</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f6f9}
+input,select,textarea{width:100%;padding:7px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;font-family:inherit;background:#fff;color:#222}
+input:focus,select:focus,textarea:focus{outline:2px solid #1a2f6e;border-color:#1a2f6e}
+button{font-family:inherit;cursor:pointer}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;padding:8px 10px;border-bottom:1px solid #e8e8e8}
+td{font-size:13px;color:#333;padding:8px 10px;border-bottom:1px solid #f0f0f0}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+var useState = React.useState;
+var useEffect = React.useEffect;
+var useCallback = React.useCallback;
+
+// ─── Firebase REST ────────────────────────────────────────────────────────────
+var PROJECT = "soiaviationtaskpm";
+var KEY = "AIzaSyCvZZu_HQzqYJVDd33tFh4WAu9YLcbK6yc";
+var BASE = "https://firestore.googleapis.com/v1/projects/" + PROJECT + "/databases/(default)/documents";
+var POLL = 15000;
+
+function toF(obj){var o={};Object.keys(obj).forEach(function(k){var v=obj[k];if(v===null||v===undefined)o[k]={nullValue:null};else if(typeof v==="boolean")o[k]={booleanValue:v};else if(typeof v==="number")o[k]={doubleValue:v};else if(Array.isArray(v))o[k]={arrayValue:{values:v.map(function(i){return typeof i==="object"?{mapValue:{fields:toF(i)}}:{stringValue:String(i)};})}};else if(typeof v==="object")o[k]={mapValue:{fields:toF(v)}};else o[k]={stringValue:String(v)};});return o;}
+function fF(f){if(!f)return null;if("stringValue"in f)return f.stringValue;if("integerValue"in f)return Number(f.integerValue);if("doubleValue"in f)return Number(f.doubleValue);if("booleanValue"in f)return f.booleanValue;if("nullValue"in f)return null;if("arrayValue"in f)return(f.arrayValue.values||[]).map(function(v){return v.mapValue?fFs(v.mapValue.fields):fF(v);});if("mapValue"in f)return fFs(f.mapValue.fields||{});return null;}
+function fFs(fields){var o={};Object.keys(fields||{}).forEach(function(k){o[k]=fF(fields[k]);});return o;}
+function dTo(doc){var o=fFs(doc.fields||{});o.id=doc.name.split("/").pop();return o;}
+async function fsGet(col){var r=await fetch(BASE+"/"+col+"?key="+KEY+"&pageSize=300");var d=await r.json();if(!d.documents)return[];return d.documents.map(dTo);}
+async function fsAdd(col,data){var r=await fetch(BASE+"/"+col+"?key="+KEY,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fields:toF(data)})});if(!r.ok)throw new Error(await r.text());return dTo(await r.json());}
+async function fsPatch(col,id,data){var fields=toF(data);var mask=Object.keys(fields).map(function(k){return"updateMask.fieldPaths="+k;}).join("&");var r=await fetch(BASE+"/"+col+"/"+id+"?"+mask+"&key="+KEY,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({fields:fields})});if(!r.ok)throw new Error(await r.text());}
+async function fsDel(col,id){await fetch(BASE+"/"+col+"/"+id+"?key="+KEY,{method:"DELETE"});}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+var BUFFER = 200000;
+var RM = {owner:{bg:"#1a2f6e",text:"#fff",label:"Owner"},admin:{bg:"#c0392b",text:"#fff",label:"Admin"},member:{bg:"#e8eaf6",text:"#1a2f6e",label:"Member"}};
+var RFQ_STATUSES = ["Draft","Submitted","Under Review","Queries","Approved","Rejected"];
+var RFQ_COLORS = {
+  "Draft":{bg:"#f0f0f0",text:"#666"},
+  "Submitted":{bg:"#e8eaf6",text:"#1a2f6e"},
+  "Under Review":{bg:"#fff3cd",text:"#856404"},
+  "Queries":{bg:"#faeeda",text:"#854f0b"},
+  "Approved":{bg:"#d4edda",text:"#155724"},
+  "Rejected":{bg:"#fcebeb",text:"#a32d2d"}
+};
+
+function uid(){return Math.random().toString(36).slice(2,9);}
+function ini(n){return(n||"?").split(" ").map(function(w){return w[0];}).join("").toUpperCase().slice(0,2);}
+function money(n){var v=Number(n)||0;return"$"+v.toLocaleString("en-US",{maximumFractionDigits:0});}
+function bdg(bg,text){return{background:bg,color:text,fontSize:11,padding:"2px 8px",borderRadius:10,fontWeight:500,display:"inline-block",whiteSpace:"nowrap"};}
+function avStyle(n,sz){sz=sz||28;return{width:sz,height:sz,borderRadius:"50%",background:"#1a2f6e",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:sz*0.36,fontWeight:500,flexShrink:0};}
+
+var NAV_S={background:"linear-gradient(135deg,#1a2f6e 0%,#c0392b 100%)",padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52};
+var SB_S={width:200,background:"#1a2f6e",minHeight:"calc(100vh - 52px)",padding:"16px 0",flexShrink:0,position:"relative"};
+var CARD={background:"#fff",border:"1px solid #e8e8e8",borderRadius:10,padding:"16px 18px"};
+var BPR={background:"#c0392b",color:"#fff",border:"none",borderRadius:6,padding:"7px 16px",fontSize:13,fontWeight:500,cursor:"pointer"};
+var BGH={background:"transparent",color:"#333",border:"1px solid #ccc",borderRadius:6,padding:"6px 14px",fontSize:13,cursor:"pointer"};
+function siStyle(a){return{display:"flex",alignItems:"center",gap:10,padding:"9px 18px",cursor:"pointer",color:a?"#fff":"rgba(255,255,255,0.6)",background:a?"rgba(255,255,255,0.12)":"transparent",fontSize:13,fontWeight:a?500:400,borderLeft:a?"3px solid #c0392b":"3px solid transparent"};}
+
+// Week helpers
+function startOfWeek(d){var x=new Date(d);var day=x.getDay();var diff=x.getDate()-day+(day===0?-6:1);x.setDate(diff);x.setHours(0,0,0,0);return x;}
+function addDays(d,n){var x=new Date(d);x.setDate(x.getDate()+n);return x;}
+function fmtDate(d){return d.toISOString().slice(0,10);}
+function weekLabel(d){return d.toLocaleDateString("en-US",{month:"short",day:"numeric"});}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+function App(){
+  var s=useState("loading");var screen=s[0];var setScreen=s[1];
+  var m=useState([]);var members=m[0];var setMembers=m[1];
+  var u=useState(null);var user=u[0];var setUser=u[1];
+  var le=useState("");var loginEmail=le[0];var setLoginEmail=le[1];
+  var vw=useState("overview");var view=vw[0];var setView=vw[1];
+  var to=useState("");var toast=to[0];var setToast=to[1];
+  var md=useState(null);var modal=md[0];var setModal=md[1];
+
+  // Data collections
+  var rc=useState([]);var receivables=rc[0];var setReceivables=rc[1];
+  var so=useState([]);var salesOrders=so[0];var setSalesOrders=so[1];
+  var fc=useState([]);var fixedCosts=fc[0];var setFixedCosts=fc[1];
+  var po=useState([]);var purchaseOrders=po[0];var setPurchaseOrders=po[1];
+  var bk=useState([]);var backlog=bk[0];var setBacklog=bk[1];
+  var rf=useState([]);var rfqs=rf[0];var setRfqs=rf[1];
+  var st=useState(null);var settings=st[0];var setSettings=st[1];
+
+  function showToast(msg){setToast(msg);setTimeout(function(){setToast("");},3500);}
+
+  var loadAll=useCallback(async function(){
+    try{
+      var res=await Promise.all([fsGet("members"),fsGet("cf_receivables"),fsGet("cf_salesorders"),fsGet("cf_fixedcosts"),fsGet("cf_purchaseorders"),fsGet("cf_backlog"),fsGet("cf_rfqs"),fsGet("cf_settings")]);
+      setMembers(res[0]);
+      setReceivables(res[1]);
+      setSalesOrders(res[2]);
+      setFixedCosts(res[3]);
+      setPurchaseOrders(res[4]);
+      setBacklog(res[5]);
+      setRfqs(res[6]);
+      var setg=res[7];
+      if(setg.length===0){
+        var added=await fsAdd("cf_settings",{startingCash:0,buffer:BUFFER,backlogTotal:0});
+        setSettings(added);
+      }else setSettings(setg[0]);
+    }catch(e){showToast("Load error: "+e.message);}
+  },[]);
+
+  useEffect(function(){loadAll().then(function(){setScreen("login");});},[]);
+
+  function loginWithEmail(){
+    if(!loginEmail.trim()){showToast("Enter your email");return;}
+    var found=members.find(function(m){return(m.email||"").toLowerCase()===loginEmail.trim().toLowerCase();});
+    if(found){setUser(found);setScreen("app");}
+    else{showToast("Email not found. Ask your admin to add you in the Task Manager.");}
+  }
+
+  var canManage=user&&(user.role==="owner"||user.role==="admin");
+  var isOwner=user&&user.role==="owner";
+
+  // Generic CRUD
+  function makeAdd(col,setter){return async function(data){try{var added=await fsAdd(col,data);setter(function(p){return p.concat([added]);});showToast("Added ✓");}catch(e){showToast("Error: "+e.message);}};}
+  function makeDel(col,setter){return async function(id){try{await fsDel(col,id);setter(function(p){return p.filter(function(x){return x.id!==id;});});showToast("Deleted");}catch(e){showToast("Error: "+e.message);}};}
+  function makePatch(col,setter){return async function(id,data){try{await fsPatch(col,id,data);setter(function(p){return p.map(function(x){return x.id===id?Object.assign({},x,data):x;});});showToast("Saved ✓");}catch(e){showToast("Error: "+e.message);}};}
+
+  async function saveSettings(data){try{await fsPatch("cf_settings",settings.id,data);setSettings(Object.assign({},settings,data));showToast("Saved ✓");}catch(e){showToast("Error: "+e.message);}}
+
+  if(screen==="loading")return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
+      <div style={{fontSize:40}}>✈</div>
+      <p style={{color:"#666",fontSize:14}}>Loading Cashflow Dashboard...</p>
+    </div>
+  );
+
+  if(screen==="login")return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f4f6f9"}}>
+      <div style={{background:"linear-gradient(135deg,#1a2f6e,#c0392b)",borderRadius:16,padding:"40px 48px",textAlign:"center",color:"#fff",maxWidth:420,width:"90%"}}>
+        <div style={{fontSize:48,marginBottom:12}}>✈</div>
+        <h1 style={{margin:"0 0 6px",fontSize:24,fontWeight:500}}>Cashflow Dashboard</h1>
+        <p style={{margin:"0 0 24px",opacity:0.8,fontSize:14}}>Enter your work email to sign in</p>
+        <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:12}}>
+          <input value={loginEmail} onChange={function(e){setLoginEmail(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")loginWithEmail();}} placeholder="your@soiaviation.com" style={{fontSize:14,padding:"10px 14px",borderRadius:8,border:"none",textAlign:"center"}}/>
+          <button onClick={loginWithEmail} style={{background:"#fff",color:"#1a2f6e",border:"none",borderRadius:8,padding:"10px 28px",fontSize:14,fontWeight:500,cursor:"pointer"}}>Sign in</button>
+        </div>
+        <p style={{fontSize:11,opacity:0.6}}>Finance access required. Ask an owner if you can't sign in.</p>
+        <a href="index.html" style={{display:"block",marginTop:12,fontSize:12,color:"rgba(255,255,255,0.7)"}}>← Back to Home</a>
+      </div>
+    </div>
+  );
+
+  // Finance is sensitive — restrict whole tool to managers
+  if(!canManage)return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:14,background:"#f4f6f9"}}>
+      <div style={{fontSize:40}}>🔒</div>
+      <p style={{color:"#333",fontSize:15,fontWeight:500}}>Restricted</p>
+      <p style={{color:"#888",fontSize:13,maxWidth:340,textAlign:"center"}}>The cashflow dashboard is available to owners and admins only. Contact an owner if you need access.</p>
+      <a href="index.html" style={{fontSize:13,color:"#1a2f6e"}}>← Back to Home</a>
+    </div>
+  );
+
+  var navItems=[
+    {key:"overview",icon:"📊",label:"90-Day View"},
+    {key:"in",icon:"📥",label:"Money In"},
+    {key:"out",icon:"📤",label:"Money Out"},
+    {key:"backlog",icon:"🏢",label:"Rent Backlog"},
+    {key:"rfq",icon:"📋",label:"RFQs"},
+    {key:"alerts",icon:"🔔",label:"Alerts"}
+  ];
+  if(isOwner)navItems.push({key:"settings",icon:"⚙",label:"Settings"});
+
+  return(
+    <div style={{fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",minHeight:"100vh",background:"#f4f6f9"}}>
+      {toast&&<div style={{position:"fixed",bottom:20,right:20,background:"#1a2f6e",color:"#fff",padding:"10px 18px",borderRadius:8,fontSize:13,zIndex:9999,boxShadow:"0 4px 12px rgba(0,0,0,0.2)"}}>{toast}</div>}
+
+      <div style={NAV_S}>
+        <div style={{display:"flex",alignItems:"center",gap:16,color:"#fff",fontWeight:500,fontSize:16}}>
+          <span style={{fontSize:20}}>✈</span> Cashflow Dashboard
+          <a href="index.html" style={{fontSize:12,color:"rgba(255,255,255,0.7)",textDecoration:"none",background:"rgba(255,255,255,0.12)",padding:"4px 10px",borderRadius:6}}>← Home</a>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={Object.assign({},avStyle(user.name,30),{border:"2px solid rgba(255,255,255,0.4)"})}>{ini(user.name)}</div>
+          <span style={{color:"rgba(255,255,255,0.9)",fontSize:13}}>{user.name}</span>
+          <span style={Object.assign({},bdg(RM[user.role].bg,RM[user.role].text),{fontSize:10})}>{RM[user.role].label}</span>
+          <button onClick={function(){setUser(null);setScreen("login");}} style={{background:"rgba(255,255,255,0.15)",color:"#fff",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>Sign out</button>
+        </div>
+      </div>
+
+      <div style={{display:"flex"}}>
+        <div style={SB_S}>
+          <div style={{padding:"0 18px 12px",fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:1}}>Navigation</div>
+          {navItems.map(function(item){return(
+            <div key={item.key} style={siStyle(view===item.key)} onClick={function(){setView(item.key);}}>
+              <span>{item.icon}</span>{item.label}
+            </div>
+          );})}
+          <div style={{position:"absolute",bottom:16,left:0,width:200,padding:"0 18px",boxSizing:"border-box"}}>
+            <div style={{background:"rgba(255,255,255,0.08)",borderRadius:8,padding:"8px 12px"}}>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginBottom:2}}>Buffer floor</div>
+              <div style={{fontSize:13,color:"#fff",fontWeight:500}}>{money(settings?settings.buffer:BUFFER)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{flex:1,padding:20,overflowY:"auto",minHeight:"calc(100vh - 52px)"}}>
+          {view==="overview"&&<Overview receivables={receivables} salesOrders={salesOrders} fixedCosts={fixedCosts} purchaseOrders={purchaseOrders} settings={settings}/>}
+          {view==="in"&&<MoneyIn receivables={receivables} salesOrders={salesOrders} onAddRec={makeAdd("cf_receivables",setReceivables)} onDelRec={makeDel("cf_receivables",setReceivables)} onAddSO={makeAdd("cf_salesorders",setSalesOrders)} onDelSO={makeDel("cf_salesorders",setSalesOrders)} setModal={setModal}/>}
+          {view==="out"&&<MoneyOut fixedCosts={fixedCosts} purchaseOrders={purchaseOrders} onAddFC={makeAdd("cf_fixedcosts",setFixedCosts)} onDelFC={makeDel("cf_fixedcosts",setFixedCosts)} onAddPO={makeAdd("cf_purchaseorders",setPurchaseOrders)} onDelPO={makeDel("cf_purchaseorders",setPurchaseOrders)} setModal={setModal}/>}
+          {view==="backlog"&&<Backlog settings={settings} backlog={backlog} receivables={receivables} salesOrders={salesOrders} fixedCosts={fixedCosts} purchaseOrders={purchaseOrders} onSaveSettings={saveSettings} onAddPayment={makeAdd("cf_backlog",setBacklog)} onDelPayment={makeDel("cf_backlog",setBacklog)} isOwner={isOwner}/>}
+          {view==="rfq"&&<RFQs rfqs={rfqs} onAdd={makeAdd("cf_rfqs",setRfqs)} onPatch={makePatch("cf_rfqs",setRfqs)} onDel={makeDel("cf_rfqs",setRfqs)} canManage={canManage}/>}
+          {view==="alerts"&&<Alerts receivables={receivables} purchaseOrders={purchaseOrders} salesOrders={salesOrders} fixedCosts={fixedCosts} settings={settings}/>}
+          {view==="settings"&&isOwner&&<Settings settings={settings} onSave={saveSettings}/>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 90-Day projection engine ─────────────────────────────────────────────────
+function buildProjection(receivables,salesOrders,fixedCosts,purchaseOrders,settings){
+  var weeks=[];
+  var start=startOfWeek(new Date());
+  var running=settings?Number(settings.startingCash)||0:0;
+  for(var w=0;w<13;w++){
+    var ws=addDays(start,w*7);
+    var we=addDays(ws,6);
+    var wsS=fmtDate(ws),weS=fmtDate(we);
+    var inflow=0,outflow=0;
+    receivables.forEach(function(r){if(r.dueDate&&r.dueDate>=wsS&&r.dueDate<=weS)inflow+=Number(r.amount)||0;});
+    salesOrders.forEach(function(s){if(s.expectedDate&&s.expectedDate>=wsS&&s.expectedDate<=weS)inflow+=Number(s.value)||0;});
+    fixedCosts.forEach(function(f){
+      if(f.frequency==="weekly")outflow+=Number(f.amount)||0;
+      else if(f.frequency==="monthly"&&ws.getDate()<=7)outflow+=Number(f.amount)||0;
+    });
+    salesOrders.forEach(function(s){if(s.expectedDate&&s.expectedDate>=wsS&&s.expectedDate<=weS)outflow+=Number(s.estPurchaseCost)||0;});
+    purchaseOrders.forEach(function(p){if(p.dueDate&&p.dueDate>=wsS&&p.dueDate<=weS)outflow+=Number(p.amount)||0;});
+    running=running+inflow-outflow;
+    var buffer=settings?Number(settings.buffer)||0:0;
+    weeks.push({label:weekLabel(ws),start:wsS,inflow:inflow,outflow:outflow,net:inflow-outflow,running:running,surplus:running-buffer,belowBuffer:running<buffer});
+  }
+  return weeks;
+}
+
+function Overview(props){
+  var weeks=buildProjection(props.receivables,props.salesOrders,props.fixedCosts,props.purchaseOrders,props.settings);
+  var maxAbs=Math.max.apply(null,weeks.map(function(w){return Math.abs(w.running);}).concat([1]));
+  var totalSurplus=weeks.reduce(function(a,w){return a+Math.max(0,w.surplus);},0);
+  return(
+    <div>
+      <h2 style={{margin:"0 0 4px",fontSize:20,fontWeight:500,color:"#222"}}>90-Day Cash Position</h2>
+      <p style={{margin:"0 0 18px",fontSize:13,color:"#666"}}>Week-by-week net position and surplus above the {money(props.settings?props.settings.buffer:BUFFER)} buffer.</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginBottom:18}}>
+        <div style={{background:"#1a2f6e",borderRadius:10,padding:"14px 16px",color:"#fff"}}><div style={{fontSize:24,fontWeight:500}}>{money(props.settings?props.settings.startingCash:0)}</div><div style={{fontSize:12,opacity:0.8,marginTop:2}}>Starting cash</div></div>
+        <div style={{background:"#1a7a4a",borderRadius:10,padding:"14px 16px",color:"#fff"}}><div style={{fontSize:24,fontWeight:500}}>{money(totalSurplus)}</div><div style={{fontSize:12,opacity:0.8,marginTop:2}}>Total surplus (13 wk)</div></div>
+        <div style={{background:weeks.some(function(w){return w.belowBuffer;})?"#c0392b":"#555",borderRadius:10,padding:"14px 16px",color:"#fff"}}><div style={{fontSize:24,fontWeight:500}}>{weeks.filter(function(w){return w.belowBuffer;}).length}</div><div style={{fontSize:12,opacity:0.8,marginTop:2}}>Weeks below buffer</div></div>
+      </div>
+      <div style={CARD}>
+        <p style={{fontSize:13,fontWeight:500,color:"#222",margin:"0 0 14px"}}>Projected running cash by week</p>
+        <div style={{display:"flex",alignItems:"flex-end",gap:6,height:160,marginBottom:10}}>
+          {weeks.map(function(w,i){
+            var h=Math.max(4,Math.abs(w.running)/maxAbs*140);
+            return(
+              <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}} title={w.label+": "+money(w.running)}>
+                <div style={{width:"100%",height:h,background:w.belowBuffer?"#c0392b":w.running>=0?"#1a2f6e":"#922b21",borderRadius:"4px 4px 0 0"}}/>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          {weeks.map(function(w,i){return<div key={i} style={{flex:1,textAlign:"center",fontSize:9,color:"#888"}}>{w.label}</div>;})}
+        </div>
+      </div>
+      <div style={Object.assign({},CARD,{marginTop:14,overflowX:"auto"})}>
+        <table>
+          <thead><tr><th>Week of</th><th>In</th><th>Out</th><th>Net</th><th>Running</th><th>Surplus</th></tr></thead>
+          <tbody>
+            {weeks.map(function(w,i){return(
+              <tr key={i} style={w.belowBuffer?{background:"#fcebeb"}:{}}>
+                <td>{w.label}</td>
+                <td style={{color:"#1a7a4a"}}>{money(w.inflow)}</td>
+                <td style={{color:"#c0392b"}}>{money(w.outflow)}</td>
+                <td style={{fontWeight:500,color:w.net>=0?"#1a7a4a":"#c0392b"}}>{money(w.net)}</td>
+                <td style={{fontWeight:500}}>{money(w.running)}</td>
+                <td style={{fontWeight:500,color:w.surplus>=0?"#1a7a4a":"#c0392b"}}>{money(w.surplus)}</td>
+              </tr>
+            );})}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Money In ─────────────────────────────────────────────────────────────────
+function MoneyIn(props){
+  var rec=props.receivables,so=props.salesOrders;
+  return(
+    <div>
+      <h2 style={{margin:"0 0 16px",fontSize:18,fontWeight:500,color:"#222"}}>Money In</h2>
+      <SimpleTable
+        title="Outstanding Receivables"
+        subtitle="Invoiced, awaiting payment (Pentagon open SO report)"
+        rows={rec}
+        cols={[{k:"customer",l:"Customer"},{k:"amount",l:"Amount",money:true},{k:"dueDate",l:"Due date"},{k:"invoiceRef",l:"Invoice #"}]}
+        fields={[{k:"customer",l:"Customer",t:"text"},{k:"amount",l:"Amount",t:"number"},{k:"dueDate",l:"Due date",t:"date"},{k:"invoiceRef",l:"Invoice #",t:"text"}]}
+        onAdd={props.onAddRec} onDel={props.onDelRec}
+      />
+      <div style={{height:14}}/>
+      <SimpleTable
+        title="Confirmed Sales Orders (not yet invoiced)"
+        subtitle="Expected value & payment timing (Pentagon open SO report)"
+        rows={so}
+        cols={[{k:"customer",l:"Customer"},{k:"value",l:"Expected value",money:true},{k:"expectedDate",l:"Expected date"},{k:"estPurchaseCost",l:"Est. purchase cost",money:true}]}
+        fields={[{k:"customer",l:"Customer",t:"text"},{k:"value",l:"Expected value",t:"number"},{k:"expectedDate",l:"Expected payment date",t:"date"},{k:"estPurchaseCost",l:"Est. purchase cost (from Ramin/purchasing)",t:"number"}]}
+        onAdd={props.onAddSO} onDel={props.onDelSO}
+      />
+    </div>
+  );
+}
+
+// ─── Money Out ────────────────────────────────────────────────────────────────
+function MoneyOut(props){
+  return(
+    <div>
+      <h2 style={{margin:"0 0 16px",fontSize:18,fontWeight:500,color:"#222"}}>Money Out</h2>
+      <SimpleTable
+        title="Fixed Costs"
+        subtitle="Payroll, rent, utilities (Mark — LA; Sidra & Aaron — London)"
+        rows={props.fixedCosts}
+        cols={[{k:"name",l:"Cost"},{k:"office",l:"Office"},{k:"amount",l:"Amount",money:true},{k:"frequency",l:"Frequency"}]}
+        fields={[{k:"name",l:"Cost name",t:"text"},{k:"office",l:"Office",t:"select",opts:["LA","London"]},{k:"amount",l:"Amount",t:"number"},{k:"frequency",l:"Frequency",t:"select",opts:["weekly","monthly"]}]}
+        onAdd={props.onAddFC} onDel={props.onDelFC}
+      />
+      <div style={{height:14}}/>
+      <SimpleTable
+        title="Open Purchase Orders"
+        subtitle="PO value, vendor, payment due (Pentagon open PO report)"
+        rows={props.purchaseOrders}
+        cols={[{k:"vendor",l:"Vendor"},{k:"amount",l:"PO value",money:true},{k:"dueDate",l:"Payment due"},{k:"poRef",l:"PO #"}]}
+        fields={[{k:"vendor",l:"Vendor",t:"text"},{k:"amount",l:"PO value",t:"number"},{k:"dueDate",l:"Payment due date",t:"date"},{k:"poRef",l:"PO #",t:"text"}]}
+        onAdd={props.onAddPO} onDel={props.onDelPO}
+      />
+    </div>
+  );
+}
+
+// ─── Reusable table with add/delete ─────────────────────────────────────────────
+function SimpleTable(props){
+  var ad=useState(false);var adding=ad[0];var setAdding=ad[1];
+  var blank={};props.fields.forEach(function(f){blank[f.k]=f.t==="select"?f.opts[0]:"";});
+  var fs=useState(blank);var form=fs[0];var setForm=fs[1];
+  function set(k,v){setForm(function(f){return Object.assign({},f,{[k]:v});});}
+  function submit(){
+    var data={};
+    props.fields.forEach(function(f){data[f.k]=f.t==="number"?(Number(form[f.k])||0):form[f.k];});
+    props.onAdd(data);
+    setForm(blank);setAdding(false);
+  }
+  return(
+    <div style={CARD}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+        <div>
+          <p style={{fontSize:15,fontWeight:500,color:"#222",margin:0}}>{props.title}</p>
+          {props.subtitle&&<p style={{fontSize:12,color:"#888",margin:"2px 0 0"}}>{props.subtitle}</p>}
+        </div>
+        <button onClick={function(){setAdding(!adding);}} style={Object.assign({},BPR,{padding:"5px 12px",fontSize:12})}>{adding?"Cancel":"+ Add"}</button>
+      </div>
+      {adding&&(
+        <div style={{background:"#f8f9fa",borderRadius:8,padding:12,margin:"10px 0",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,alignItems:"end"}}>
+          {props.fields.map(function(f){return(
+            <div key={f.k}>
+              <label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>{f.l}</label>
+              {f.t==="select"
+                ? <select value={form[f.k]} onChange={function(e){set(f.k,e.target.value);}}>{f.opts.map(function(o){return <option key={o} value={o}>{o}</option>;})}</select>
+                : <input type={f.t==="number"?"number":f.t==="date"?"date":"text"} value={form[f.k]} onChange={function(e){set(f.k,e.target.value);}}/>
+              }
+            </div>
+          );})}
+          <button onClick={submit} style={Object.assign({},BPR,{padding:"7px 14px"})}>Save</button>
+        </div>
+      )}
+      <div style={{overflowX:"auto",marginTop:10}}>
+        <table>
+          <thead><tr>{props.cols.map(function(c){return <th key={c.k}>{c.l}</th>;})}<th></th></tr></thead>
+          <tbody>
+            {props.rows.length===0&&<tr><td colSpan={props.cols.length+1} style={{color:"#aaa",textAlign:"center",padding:"16px"}}>No entries yet</td></tr>}
+            {props.rows.map(function(row){return(
+              <tr key={row.id}>
+                {props.cols.map(function(c){return <td key={c.k}>{c.money?money(row[c.k]):(row[c.k]||"—")}</td>;})}
+                <td style={{textAlign:"right"}}><button onClick={function(){props.onDel(row.id);}} style={{background:"none",border:"none",color:"#ccc",fontSize:16,cursor:"pointer"}}>×</button></td>
+              </tr>
+            );})}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Rent Backlog ─────────────────────────────────────────────────────────────
+function Backlog(props){
+  var settings=props.settings,backlog=props.backlog;
+  var total=settings?Number(settings.backlogTotal)||0:0;
+  var paid=backlog.reduce(function(a,p){return a+(Number(p.amount)||0);},0);
+  var remaining=total-paid;
+  var weeks=buildProjection(props.receivables,props.salesOrders,props.fixedCosts,props.purchaseOrders,props.settings);
+  var avgSurplus=weeks.length?weeks.reduce(function(a,w){return a+Math.max(0,w.surplus);},0)/weeks.length:0;
+  var weeksToClasr=avgSurplus>0?Math.ceil(remaining/avgSurplus):null;
+  var clearDate=weeksToClasr?addDays(new Date(),weeksToClasr*7):null;
+  var ad=useState(false);var adding=ad[0];var setAdding=ad[1];
+  var fs=useState({amount:"",date:new Date().toISOString().slice(0,10),note:""});var form=fs[0];var setForm=fs[1];
+  function set(k,v){setForm(function(f){return Object.assign({},f,{[k]:v});});}
+
+  return(
+    <div>
+      <h2 style={{margin:"0 0 4px",fontSize:18,fontWeight:500,color:"#222"}}>London Rent Backlog</h2>
+      <p style={{margin:"0 0 16px",fontSize:13,color:"#666"}}>Figures from Sidra & Aaron. Clearance projection based on average weekly surplus above buffer.</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:10,marginBottom:18}}>
+        <div style={{background:"#c0392b",borderRadius:10,padding:"14px 16px",color:"#fff"}}><div style={{fontSize:22,fontWeight:500}}>{money(total)}</div><div style={{fontSize:12,opacity:0.8,marginTop:2}}>Total backlog</div></div>
+        <div style={{background:"#1a7a4a",borderRadius:10,padding:"14px 16px",color:"#fff"}}><div style={{fontSize:22,fontWeight:500}}>{money(paid)}</div><div style={{fontSize:12,opacity:0.8,marginTop:2}}>Paid so far</div></div>
+        <div style={{background:"#1a2f6e",borderRadius:10,padding:"14px 16px",color:"#fff"}}><div style={{fontSize:22,fontWeight:500}}>{money(remaining)}</div><div style={{fontSize:12,opacity:0.8,marginTop:2}}>Remaining</div></div>
+        <div style={{background:"#555",borderRadius:10,padding:"14px 16px",color:"#fff"}}><div style={{fontSize:22,fontWeight:500}}>{clearDate?clearDate.toLocaleDateString("en-US",{month:"short",year:"numeric"}):"—"}</div><div style={{fontSize:12,opacity:0.8,marginTop:2}}>Projected clearance</div></div>
+      </div>
+      {props.isOwner&&(
+        <div style={Object.assign({},CARD,{marginBottom:14})}>
+          <p style={{fontSize:13,fontWeight:500,color:"#222",margin:"0 0 10px"}}>Set total backlog amount</p>
+          <div style={{display:"flex",gap:8,alignItems:"end"}}>
+            <div style={{flex:1}}><label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>Total outstanding (from Sidra/Aaron)</label><input type="number" defaultValue={total} id="backlogTotalInput"/></div>
+            <button onClick={function(){var v=Number(document.getElementById("backlogTotalInput").value)||0;props.onSaveSettings({backlogTotal:v});}} style={BPR}>Save</button>
+          </div>
+        </div>
+      )}
+      <div style={CARD}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+          <p style={{fontSize:15,fontWeight:500,color:"#222",margin:0}}>Payment history</p>
+          <button onClick={function(){setAdding(!adding);}} style={Object.assign({},BPR,{padding:"5px 12px",fontSize:12})}>{adding?"Cancel":"+ Log payment"}</button>
+        </div>
+        {adding&&(
+          <div style={{background:"#f8f9fa",borderRadius:8,padding:12,margin:"10px 0",display:"flex",gap:8,alignItems:"end",flexWrap:"wrap"}}>
+            <div><label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>Amount</label><input type="number" value={form.amount} onChange={function(e){set("amount",e.target.value);}}/></div>
+            <div><label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>Date</label><input type="date" value={form.date} onChange={function(e){set("date",e.target.value);}}/></div>
+            <div style={{flex:1}}><label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>Note</label><input value={form.note} onChange={function(e){set("note",e.target.value);}}/></div>
+            <button onClick={function(){props.onAddPayment({amount:Number(form.amount)||0,date:form.date,note:form.note});setForm({amount:"",date:new Date().toISOString().slice(0,10),note:""});setAdding(false);}} style={BPR}>Save</button>
+          </div>
+        )}
+        <div style={{overflowX:"auto",marginTop:10}}>
+          <table>
+            <thead><tr><th>Date</th><th>Amount</th><th>Note</th><th></th></tr></thead>
+            <tbody>
+              {backlog.length===0&&<tr><td colSpan={4} style={{color:"#aaa",textAlign:"center",padding:16}}>No payments logged</td></tr>}
+              {[].concat(backlog).sort(function(a,b){return(b.date||"").localeCompare(a.date||"");}).map(function(p){return(
+                <tr key={p.id}><td>{p.date}</td><td style={{color:"#1a7a4a",fontWeight:500}}>{money(p.amount)}</td><td>{p.note||"—"}</td><td style={{textAlign:"right"}}><button onClick={function(){props.onDelPayment(p.id);}} style={{background:"none",border:"none",color:"#ccc",fontSize:16,cursor:"pointer"}}>×</button></td></tr>
+              );})}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── RFQs (with status dropdown) ────────────────────────────────────────────────
+function RFQs(props){
+  var ad=useState(false);var adding=ad[0];var setAdding=ad[1];
+  var fs=useState({ref:"",customer:"",value:"",status:"Draft",notes:""});var form=fs[0];var setForm=fs[1];
+  function set(k,v){setForm(function(f){return Object.assign({},f,{[k]:v});});}
+  var filt=useState("all");var filter=filt[0];var setFilter=filt[1];
+  var rows=props.rfqs.filter(function(r){return filter==="all"||r.status===filter;});
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
+        <h2 style={{margin:0,fontSize:18,fontWeight:500,color:"#222"}}>RFQs</h2>
+        <div style={{display:"flex",gap:8}}>
+          <select value={filter} onChange={function(e){setFilter(e.target.value);}} style={{width:"auto",fontSize:12,padding:"5px 8px"}}>
+            <option value="all">All statuses</option>
+            {RFQ_STATUSES.map(function(s){return <option key={s} value={s}>{s}</option>;})}
+          </select>
+          {props.canManage&&<button onClick={function(){setAdding(!adding);}} style={BPR}>{adding?"Cancel":"+ New RFQ"}</button>}
+        </div>
+      </div>
+      {adding&&(
+        <div style={Object.assign({},CARD,{marginBottom:14})}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8,alignItems:"end"}}>
+            <div><label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>RFQ #</label><input value={form.ref} onChange={function(e){set("ref",e.target.value);}}/></div>
+            <div><label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>Customer</label><input value={form.customer} onChange={function(e){set("customer",e.target.value);}}/></div>
+            <div><label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>Value</label><input type="number" value={form.value} onChange={function(e){set("value",e.target.value);}}/></div>
+            <div><label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>Status</label>
+              <select value={form.status} onChange={function(e){set("status",e.target.value);}}>{RFQ_STATUSES.map(function(s){return <option key={s} value={s}>{s}</option>;})}</select>
+            </div>
+            <button onClick={function(){props.onAdd({ref:form.ref,customer:form.customer,value:Number(form.value)||0,status:form.status,notes:form.notes});setForm({ref:"",customer:"",value:"",status:"Draft",notes:""});setAdding(false);}} style={BPR}>Save</button>
+          </div>
+        </div>
+      )}
+      <div style={Object.assign({},CARD,{overflowX:"auto"})}>
+        <table>
+          <thead><tr><th>RFQ #</th><th>Customer</th><th>Value</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {rows.length===0&&<tr><td colSpan={5} style={{color:"#aaa",textAlign:"center",padding:16}}>No RFQs</td></tr>}
+            {rows.map(function(r){var sc=RFQ_COLORS[r.status]||RFQ_COLORS["Draft"];return(
+              <tr key={r.id}>
+                <td style={{fontWeight:500}}>{r.ref||"—"}</td>
+                <td>{r.customer||"—"}</td>
+                <td>{money(r.value)}</td>
+                <td>
+                  {props.canManage
+                    ? <select value={r.status} onChange={function(e){props.onPatch(r.id,{status:e.target.value});}} style={{width:"auto",fontSize:12,padding:"3px 8px",border:"1px solid "+sc.bg,background:sc.bg,color:sc.text,borderRadius:8}}>
+                        {RFQ_STATUSES.map(function(s){return <option key={s} value={s}>{s}</option>;})}
+                      </select>
+                    : <span style={bdg(sc.bg,sc.text)}>{r.status}</span>
+                  }
+                </td>
+                <td style={{textAlign:"right"}}>{props.canManage&&<button onClick={function(){props.onDel(r.id);}} style={{background:"none",border:"none",color:"#ccc",fontSize:16,cursor:"pointer"}}>×</button>}</td>
+              </tr>
+            );})}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Alerts ───────────────────────────────────────────────────────────────────
+function Alerts(props){
+  var today=new Date();
+  var alerts=[];
+  // Invoices overdue
+  props.receivables.forEach(function(r){
+    if(r.dueDate){
+      var days=Math.floor((today-new Date(r.dueDate))/86400000);
+      if(days>=30)alerts.push({level:"urgent",msg:"URGENT: "+(r.customer||"Invoice")+" "+money(r.amount)+" is "+days+" days overdue (30+)",who:"Escalate"});
+      else if(days>=7)alerts.push({level:"warn",msg:(r.customer||"Invoice")+" "+money(r.amount)+" is "+days+" days past due — chase",who:"Chase task"});
+    }
+  });
+  // POs due in 3 days
+  props.purchaseOrders.forEach(function(p){
+    if(p.dueDate){
+      var days=Math.floor((new Date(p.dueDate)-today)/86400000);
+      if(days>=0&&days<=3)alerts.push({level:"warn",msg:"PO to "+(p.vendor||"vendor")+" "+money(p.amount)+" due in "+days+" day(s)",who:"Greg & Ramin"});
+    }
+  });
+  // Below buffer weeks
+  var weeks=buildProjection(props.receivables,props.salesOrders,props.fixedCosts,props.purchaseOrders,props.settings);
+  weeks.forEach(function(w){if(w.belowBuffer)alerts.push({level:"urgent",msg:"Cash projected below buffer week of "+w.label+" ("+money(w.running)+")",who:"Greg & Ramin"});});
+
+  return(
+    <div>
+      <h2 style={{margin:"0 0 4px",fontSize:18,fontWeight:500,color:"#222"}}>Alerts</h2>
+      <p style={{margin:"0 0 16px",fontSize:13,color:"#666"}}>On-screen flags based on current data. (Email/push notifications require a backend — not active in this version.)</p>
+      {alerts.length===0&&<div style={Object.assign({},CARD,{color:"#1a7a4a",fontSize:14})}>✓ No active alerts. All clear.</div>}
+      {alerts.map(function(a,i){return(
+        <div key={i} style={{background:a.level==="urgent"?"#fcebeb":"#fff3cd",border:"1px solid "+(a.level==="urgent"?"#f09595":"#ffe69c"),borderRadius:10,padding:"12px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:13,color:a.level==="urgent"?"#a32d2d":"#856404",fontWeight:a.level==="urgent"?500:400}}>{a.msg}</span>
+          <span style={bdg(a.level==="urgent"?"#c0392b":"#856404","#fff")}>{a.who}</span>
+        </div>
+      );})}
+    </div>
+  );
+}
+
+// ─── Settings (Owner) ─────────────────────────────────────────────────────────
+function Settings(props){
+  var s=props.settings||{};
+  var fs=useState({startingCash:s.startingCash||0,buffer:s.buffer||BUFFER});var form=fs[0];var setForm=fs[1];
+  function set(k,v){setForm(function(f){return Object.assign({},f,{[k]:v});});}
+  return(
+    <div>
+      <h2 style={{margin:"0 0 16px",fontSize:18,fontWeight:500,color:"#222"}}>Settings</h2>
+      <div style={Object.assign({},CARD,{maxWidth:420})}>
+        <div style={{marginBottom:14}}>
+          <label style={{fontSize:12,color:"#888",display:"block",marginBottom:4}}>Starting cash position</label>
+          <input type="number" value={form.startingCash} onChange={function(e){set("startingCash",Number(e.target.value)||0);}}/>
+        </div>
+        <div style={{marginBottom:14}}>
+          <label style={{fontSize:12,color:"#888",display:"block",marginBottom:4}}>Minimum cash buffer</label>
+          <input type="number" value={form.buffer} onChange={function(e){set("buffer",Number(e.target.value)||0);}}/>
+        </div>
+        <button onClick={function(){props.onSave(form);}} style={BPR}>Save settings</button>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
